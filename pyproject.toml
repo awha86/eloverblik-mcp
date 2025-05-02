@@ -1,0 +1,16 @@
+[project]
+name = "eloverblik-mcp-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "dotenv>=0.9.9",
+    "fastmcp>=2.2.6",
+    "requests>=2.32.3",
+]
+
+[tool.ruff]
+select = ["E", "F", "W", "C"]
+ignore = ["E501"]
+line-length = 88
