@@ -2,6 +2,7 @@ import logging
 import os
 from enum import Enum
 from functools import lru_cache
+from datetime import datetime, timedelta
 
 import requests
 from dotenv import load_dotenv
@@ -98,18 +99,23 @@ class Aggregation(str, Enum):
 
 @mcp.tool()
 def eloverblik_timeseries(
-    start_date: str, end_date: str, metering_point_ids: list, aggregation: Aggregation
+    start_date: str, end_date: str, aggregation: Aggregation
 ) -> dict:
-    """Fetch time series data from the eloverblik.dk API."""
-    access_token, _ = get_api_credentials()
+    """Fetch time series data from the eloverblik.dk API, adjusting for UTC by extending the end_date."""
+    access_token, metering_point_id = get_api_credentials()
     headers = {
         "accept": "application/json",
         "Authorization": f"Bearer {access_token}",
         "api-version": "1.0",
         "Content-Type": "application/json",
     }
-    url = f"https://api.eloverblik.dk/customerapi/api/meterdata/gettimeseries/{start_date}/{end_date}/{aggregation.value}"
-    payload = {"meteringPoints": {"meteringPoint": metering_point_ids}}
+
+    # Adjust end_date to account for UTC time handling
+    adjusted_end_date = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    url = f"https://api.eloverblik.dk/customerapi/api/meterdata/gettimeseries/{start_date}/{adjusted_end_date}/{aggregation.value}"
+    payload = {"meteringPoints": {"meteringPoint": [metering_point_id]}}
+
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     return response.json()
