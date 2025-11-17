@@ -1,14 +1,32 @@
 [project]
 name = "eloverblik-mcp-server"
 version = "0.1.0"
-description = "Add your description here"
+description = "MCP server for accessing Danish Eloverblik electricity consumption data"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
-    "dotenv>=0.9.9",
+    "python-dotenv>=1.0.0",
     "fastmcp>=2.2.6",
     "requests>=2.32.3",
 ]
+authors = [
+    {name = "awha86", email = "17437445+awha86@users.noreply.github.com"}
+]
+keywords = ["mcp", "eloverblik", "electricity", "energy", "fastmcp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/awha86/eloverblik_api_mcp"
+Repository = "https://github.com/awha86/eloverblik_api_mcp"
+Issues = "https://github.com/awha86/eloverblik_api_mcp/issues"
 
 [tool.ruff]
 select = ["E", "F", "W", "C"]
