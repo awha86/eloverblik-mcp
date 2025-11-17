@@ -16,8 +16,7 @@ from fastmcp import FastMCP
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -38,13 +37,13 @@ ELOVERBLIK_BASE_URL = "https://api.eloverblik.dk/customerapi/api"
 @lru_cache(maxsize=1)
 def fetch_access_token(api_refresh_token: str) -> str:
     """Fetch a new access token using the provided API refresh token.
-    
+
     Args:
         api_refresh_token: The refresh token for the Eloverblik API
-        
+
     Returns:
         The access token to use for API requests
-        
+
     Raises:
         ValueError: If the token fetch fails or returns invalid data
         requests.HTTPError: If the API request fails
@@ -76,10 +75,10 @@ def fetch_access_token(api_refresh_token: str) -> str:
 @lru_cache(maxsize=1)
 def get_api_credentials() -> tuple[str, str]:
     """Fetch and cache the API access token and metering point ID.
-    
+
     Returns:
         Tuple of (access_token, metering_point_id)
-        
+
     Raises:
         ValueError: If required environment variables are missing
     """
@@ -95,13 +94,13 @@ def get_api_credentials() -> tuple[str, str]:
     return access_token, metering_point_id
 
 
-@mcp.tool
+@mcp.tool()
 def eloverblik_isalive() -> dict:
     """Check if the Eloverblik API is alive and accessible.
-    
+
     Returns:
         API status information as a dictionary
-        
+
     Raises:
         ValueError: If credentials are missing or invalid
         requests.HTTPError: If the API request fails
@@ -120,16 +119,16 @@ def eloverblik_isalive() -> dict:
         raise
 
 
-@mcp.tool
+@mcp.tool()
 def eloverblik_metering_points(include_all: bool = False) -> dict:
     """Fetch a list of metering points associated with your account.
-    
+
     Args:
         include_all: Include all metering points (past and present). Default is False.
-        
+
     Returns:
         Dictionary containing list of metering points with their details
-        
+
     Raises:
         ValueError: If credentials are missing or invalid
         requests.HTTPError: If the API request fails
@@ -158,7 +157,7 @@ def eloverblik_metering_points(include_all: bool = False) -> dict:
 
 class Aggregation(str, Enum):
     """Time aggregation levels for electricity consumption data."""
-    
+
     ACTUAL = "Actual"
     QUARTER = "Quarter"
     HOUR = "Hour"
@@ -167,28 +166,28 @@ class Aggregation(str, Enum):
     YEAR = "Year"
 
 
-@mcp.tool
+@mcp.tool()
 def eloverblik_timeseries(
     start_date: str, end_date: str, aggregation: Aggregation = Aggregation.HOUR
 ) -> dict:
     """Fetch electricity consumption time series data for a date range.
-    
+
     The end_date is automatically adjusted by +1 day to account for UTC time handling
     in the Eloverblik API, ensuring complete data for the requested period.
-    
+
     Args:
         start_date: Start date in YYYY-MM-DD format (e.g., "2024-01-01")
         end_date: End date in YYYY-MM-DD format (e.g., "2024-01-31")
         aggregation: Time aggregation level (Actual, Quarter, Hour, Day, Month, Year).
                     Default is Hour.
-        
+
     Returns:
         Dictionary containing time series consumption data
-        
+
     Raises:
         ValueError: If credentials are missing, invalid, or date format is incorrect
         requests.HTTPError: If the API request fails
-        
+
     Example:
         Get hourly consumption for January 2024:
         eloverblik_timeseries("2024-01-01", "2024-01-31", Aggregation.HOUR)
