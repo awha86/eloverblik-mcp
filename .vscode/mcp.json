@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "eloverblik": {
+      "type": "stdio",
+      "command": "uv",
+      "args": [
+        "--directory",
+        "${workspaceFolder}",
+        "run",
+        "main.py"
+      ]
+    }
+  }
+}
