@@ -1,14 +1,16 @@
-"""Eloverblik API MCP Server
+"""Eloverblik API MCP Server.
 
-This MCP server provides tools to interact with the Danish Eloverblik API
-for accessing electricity consumption data.
+This MCP server provides tools that mirror the Eloverblik Customer API
+surface described by its Swagger/OpenAPI specification.
 """
 
 import logging
 import os
+import re
 from datetime import datetime, timedelta
 from enum import Enum
 from functools import lru_cache
+from urllib.parse import quote
 
 import requests
 from dotenv import load_dotenv
@@ -27,132 +29,8 @@ load_dotenv(override=True)
 mcp = FastMCP("Eloverblik API Server")
 
 # API configuration from environment
-API_REFRESH_TOKEN = os.getenv("API_REFRESH_TOKEN", "")
-METERING_POINT_ID = os.getenv("METERING_POINT_ID", "")
-
-# API endpoints
 ELOVERBLIK_BASE_URL = "https://api.eloverblik.dk/customerapi/api"
-
-
-@lru_cache(maxsize=1)
-def fetch_access_token(api_refresh_token: str) -> str:
-    """Fetch a new access token using the provided API refresh token.
-
-    Args:
-        api_refresh_token: The refresh token for the Eloverblik API
-
-    Returns:
-        The access token to use for API requests
-
-    Raises:
-        ValueError: If the token fetch fails or returns invalid data
-        requests.HTTPError: If the API request fails
-    """
-    headers = {
-        "Authorization": f"Bearer {api_refresh_token}",
-        "api-version": "1.0",
-        "accept": "application/json",
-    }
-    try:
-        response = requests.get(
-            f"{ELOVERBLIK_BASE_URL}/token", headers=headers, timeout=30
-        )
-        response.raise_for_status()
-        data = response.json()
-
-        if not data.get("result"):
-            raise ValueError(
-                "Failed to fetch access token. Check the refresh token or API response."
-            )
-
-        logger.info("Successfully fetched access token")
-        return data["result"]
-    except requests.RequestException as e:
-        logger.error(f"Failed to fetch access token: {e}")
-        raise
-
-
-@lru_cache(maxsize=1)
-def get_api_credentials() -> tuple[str, str]:
-    """Fetch and cache the API access token and metering point ID.
-
-    Returns:
-        Tuple of (access_token, metering_point_id)
-
-    Raises:
-        ValueError: If required environment variables are missing
-    """
-    api_refresh_token = os.getenv("API_REFRESH_TOKEN", "")
-    metering_point_id = os.getenv("METERING_POINT_ID", "")
-
-    if not api_refresh_token or not metering_point_id:
-        raise ValueError(
-            "Missing API_REFRESH_TOKEN or METERING_POINT_ID in environment variables."
-        )
-
-    access_token = fetch_access_token(api_refresh_token)
-    return access_token, metering_point_id
-
-
-@mcp.tool()
-def eloverblik_isalive() -> dict:
-    """Check if the Eloverblik API is alive and accessible.
-
-    Returns:
-        API status information as a dictionary
-
-    Raises:
-        ValueError: If credentials are missing or invalid
-        requests.HTTPError: If the API request fails
-    """
-    try:
-        access_token, _ = get_api_credentials()
-        headers = {"Authorization": f"Bearer {access_token}"}
-        response = requests.get(
-            f"{ELOVERBLIK_BASE_URL}/isalive", headers=headers, timeout=30
-        )
-        response.raise_for_status()
-        logger.info("API is alive")
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to check API status: {e}")
-        raise
-
-
-@mcp.tool()
-def eloverblik_metering_points(include_all: bool = False) -> dict:
-    """Fetch a list of metering points associated with your account.
-
-    Args:
-        include_all: Include all metering points (past and present). Default is False.
-
-    Returns:
-        Dictionary containing list of metering points with their details
-
-    Raises:
-        ValueError: If credentials are missing or invalid
-        requests.HTTPError: If the API request fails
-    """
-    try:
-        access_token, _ = get_api_credentials()
-        headers = {
-            "accept": "application/json",
-            "Authorization": f"Bearer {access_token}",
-            "api-version": "1.0",
-        }
-        params = {"includeAll": str(include_all).lower()}
-        response = requests.get(
-            f"{ELOVERBLIK_BASE_URL}/meteringpoints/meteringpoints",
-            headers=headers,
-            params=params,
-            timeout=30,
-        )
-        response.raise_for_status()
-        logger.info(f"Fetched metering points (include_all={include_all})")
-        return response.json()
-    except Exception as e:
-        logger.error(f"Failed to fetch metering points: {e}")
-        raise
+API_VERSION = "1.0"
 
 
 class Aggregation(str, Enum):
@@ -166,64 +44,284 @@ class Aggregation(str, Enum):
     YEAR = "Year"
 
 
+@lru_cache(maxsize=1)
+def fetch_access_token(api_refresh_token: str) -> str:
+    """Fetch a new access token using the provided API refresh token."""
+    headers = {
+        "Authorization": f"******",
+        "api-version": API_VERSION,
+        "accept": "application/json",
+    }
+
+    response = requests.get(f"{ELOVERBLIK_BASE_URL}/token", headers=headers, timeout=30)
+    response.raise_for_status()
+    data = response.json()
+
+    if not data.get("result"):
+        raise ValueError(
+            "Failed to fetch access token. Check the refresh token or API response."
+        )
+
+    logger.info("Successfully fetched access token")
+    return data["result"]
+
+
+@lru_cache(maxsize=1)
+def get_access_token() -> str:
+    """Return a cached access token derived from API_REFRESH_TOKEN."""
+    api_refresh_token = os.getenv("API_REFRESH_TOKEN", "")
+    if not api_refresh_token:
+        raise ValueError("Missing API_REFRESH_TOKEN in environment variables.")
+    return fetch_access_token(api_refresh_token)
+
+
+def _build_headers(include_content_type: bool = False) -> dict[str, str]:
+    headers = {
+        "Authorization": f"******",
+        "accept": "application/json",
+        "api-version": API_VERSION,
+    }
+    if include_content_type:
+        headers["Content-Type"] = "application/json"
+    return headers
+
+
+def _resolve_metering_point_ids(metering_point_ids: list[str] | None) -> list[str]:
+    if metering_point_ids:
+        cleaned_ids = [metering_point_id.strip() for metering_point_id in metering_point_ids]
+        cleaned_ids = [metering_point_id for metering_point_id in cleaned_ids if metering_point_id]
+        if cleaned_ids:
+            return cleaned_ids
+
+    default_metering_point_id = os.getenv("METERING_POINT_ID", "").strip()
+    if not default_metering_point_id:
+        raise ValueError(
+            "Provide metering_point_ids or set METERING_POINT_ID in environment variables."
+        )
+
+    return [default_metering_point_id]
+
+
+def _metering_points_payload(metering_point_ids: list[str] | None = None) -> dict:
+    return {"meteringPoints": {"meteringPoint": _resolve_metering_point_ids(metering_point_ids)}}
+
+
+def _request_json(
+    method: str,
+    endpoint: str,
+    *,
+    params: dict | None = None,
+    json_body: dict | None = None,
+) -> dict:
+    response = requests.request(
+        method=method,
+        url=f"{ELOVERBLIK_BASE_URL}{endpoint}",
+        headers=_build_headers(include_content_type=json_body is not None),
+        params=params,
+        json=json_body,
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    if response.headers.get("content-type", "").startswith("application/json"):
+        return response.json()
+
+    try:
+        return response.json()
+    except ValueError:
+        return {"result": response.text}
+
+
+def _request_export(endpoint: str, payload: dict) -> dict:
+    response = requests.request(
+        method="POST",
+        url=f"{ELOVERBLIK_BASE_URL}{endpoint}",
+        headers=_build_headers(include_content_type=True),
+        json=payload,
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    content_disposition = response.headers.get("content-disposition", "")
+    filename_match = re.search(r'filename="?([^";]+)"?', content_disposition)
+
+    return {
+        "content_type": response.headers.get("content-type", "text/csv"),
+        "filename": filename_match.group(1) if filename_match else None,
+        "content": response.text,
+    }
+
+
+@mcp.tool()
+def eloverblik_token(force_refresh: bool = False) -> dict:
+    """Get a data access token from your configured API refresh token."""
+    if force_refresh:
+        fetch_access_token.cache_clear()
+        get_access_token.cache_clear()
+
+    return {"result": get_access_token()}
+
+
+@mcp.tool()
+def eloverblik_isalive() -> dict:
+    """Check if the Eloverblik API is alive and accessible."""
+    response = requests.request(
+        method="GET",
+        url=f"{ELOVERBLIK_BASE_URL}/isalive",
+        headers={"accept": "application/json", "api-version": API_VERSION},
+        timeout=30,
+    )
+    response.raise_for_status()
+
+    if response.headers.get("content-type", "").startswith("application/json"):
+        return response.json()
+
+    return {"result": response.text.strip().lower() == "true"}
+
+
+@mcp.tool()
+def eloverblik_metering_points(include_all: bool = False) -> dict:
+    """Fetch a list of metering points associated with your account."""
+    params = {"includeAll": str(include_all).lower()}
+    return _request_json("GET", "/meteringpoints/meteringpoints", params=params)
+
+
+@mcp.tool()
+def eloverblik_metering_point_relation_add(
+    metering_point_ids: list[str] | None = None,
+) -> dict:
+    """Add relation(s) to metering point(s) based on CPR/CVR ownership."""
+    return _request_json(
+        "POST",
+        "/meteringpoints/meteringpoint/relation/add",
+        json_body=_metering_points_payload(metering_point_ids),
+    )
+
+
+@mcp.tool()
+def eloverblik_metering_point_relation_add_with_web_access_code(
+    metering_point_id: str,
+    web_access_code: str,
+) -> dict:
+    """Add relation to one metering point using metering point ID and web access code."""
+    endpoint = (
+        "/meteringpoints/meteringpoint/relation/add/"
+        f"{quote(metering_point_id, safe='')}/{quote(web_access_code, safe='')}"
+    )
+    return _request_json("PUT", endpoint)
+
+
+@mcp.tool()
+def eloverblik_metering_point_relation_delete(metering_point_id: str) -> dict:
+    """Delete relation to a metering point."""
+    endpoint = f"/meteringpoints/meteringpoint/relation/{quote(metering_point_id, safe='')}"
+    return _request_json("DELETE", endpoint)
+
+
+@mcp.tool()
+def eloverblik_metering_point_details(
+    metering_point_ids: list[str] | None = None,
+) -> dict:
+    """Get detailed information for one or more metering points."""
+    return _request_json(
+        "POST",
+        "/meteringpoints/meteringpoint/getdetails",
+        json_body=_metering_points_payload(metering_point_ids),
+    )
+
+
+@mcp.tool()
+def eloverblik_metering_point_charges(
+    metering_point_ids: list[str] | None = None,
+) -> dict:
+    """Get current charges for one or more metering points."""
+    return _request_json(
+        "POST",
+        "/meteringpoints/meteringpoint/getcharges",
+        json_body=_metering_points_payload(metering_point_ids),
+    )
+
+
+@mcp.tool()
+def eloverblik_masterdata_export(
+    metering_point_ids: list[str] | None = None,
+) -> dict:
+    """Export metering point master data as CSV content."""
+    return _request_export(
+        "/meteringpoints/masterdata/export",
+        _metering_points_payload(metering_point_ids),
+    )
+
+
+@mcp.tool()
+def eloverblik_charges_export(
+    metering_point_ids: list[str] | None = None,
+) -> dict:
+    """Export metering point charges as CSV content."""
+    return _request_export(
+        "/meteringpoints/charges/export",
+        _metering_points_payload(metering_point_ids),
+    )
+
+
 @mcp.tool()
 def eloverblik_timeseries(
-    start_date: str, end_date: str, aggregation: Aggregation = Aggregation.HOUR
+    start_date: str,
+    end_date: str,
+    aggregation: Aggregation = Aggregation.HOUR,
+    metering_point_ids: list[str] | None = None,
 ) -> dict:
-    """Fetch electricity consumption time series data for a date range.
+    """Fetch electricity consumption time series data for a date range."""
+    adjusted_end_date = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)).strftime(
+        "%Y-%m-%d"
+    )
+    endpoint = (
+        "/meterdata/gettimeseries/"
+        f"{quote(start_date, safe='')}/{quote(adjusted_end_date, safe='')}/{quote(aggregation.value, safe='')}"
+    )
 
-    The end_date is automatically adjusted by +1 day to account for UTC time handling
-    in the Eloverblik API, ensuring complete data for the requested period.
+    return _request_json(
+        "POST",
+        endpoint,
+        json_body=_metering_points_payload(metering_point_ids),
+    )
 
-    Args:
-        start_date: Start date in YYYY-MM-DD format (e.g., "2024-01-01")
-        end_date: End date in YYYY-MM-DD format (e.g., "2024-01-31")
-        aggregation: Time aggregation level (Actual, Quarter, Hour, Day, Month, Year).
-                    Default is Hour.
 
-    Returns:
-        Dictionary containing time series consumption data
+@mcp.tool()
+def eloverblik_meter_readings(
+    start_date: str,
+    end_date: str,
+    metering_point_ids: list[str] | None = None,
+) -> dict:
+    """Fetch meter readings for one or more metering points and a date range."""
+    endpoint = (
+        "/meterdata/getmeterreadings/"
+        f"{quote(start_date, safe='')}/{quote(end_date, safe='')}"
+    )
 
-    Raises:
-        ValueError: If credentials are missing, invalid, or date format is incorrect
-        requests.HTTPError: If the API request fails
+    return _request_json(
+        "POST",
+        endpoint,
+        json_body=_metering_points_payload(metering_point_ids),
+    )
 
-    Example:
-        Get hourly consumption for January 2024:
-        eloverblik_timeseries("2024-01-01", "2024-01-31", Aggregation.HOUR)
-    """
-    try:
-        access_token, metering_point_id = get_api_credentials()
-        headers = {
-            "accept": "application/json",
-            "Authorization": f"Bearer {access_token}",
-            "api-version": "1.0",
-            "Content-Type": "application/json",
-        }
 
-        # Adjust end_date to account for UTC time handling
-        adjusted_end_date = (
-            datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-        ).strftime("%Y-%m-%d")
+@mcp.tool()
+def eloverblik_timeseries_export(
+    start_date: str,
+    end_date: str,
+    aggregation: Aggregation = Aggregation.HOUR,
+    metering_point_ids: list[str] | None = None,
+) -> dict:
+    """Export timeseries data as CSV content for one or more metering points."""
+    endpoint = (
+        "/meterdata/timeseries/export/"
+        f"{quote(start_date, safe='')}/{quote(end_date, safe='')}/{quote(aggregation.value, safe='')}"
+    )
 
-        url = f"{ELOVERBLIK_BASE_URL}/meterdata/gettimeseries/{start_date}/{adjusted_end_date}/{aggregation.value}"
-        payload = {"meteringPoints": {"meteringPoint": [metering_point_id]}}
-
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        logger.info(
-            f"Fetched timeseries data from {start_date} to {end_date} "
-            f"with {aggregation.value} aggregation"
-        )
-        return response.json()
-    except ValueError as e:
-        logger.error(f"Invalid date format: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Failed to fetch timeseries data: {e}")
-        raise
+    return _request_export(endpoint, _metering_points_payload(metering_point_ids))
 
 
 if __name__ == "__main__":
-    logging.info("Starting the Eloverblik MCP Server...")
+    logger.info("Starting the Eloverblik MCP Server...")
     mcp.run()

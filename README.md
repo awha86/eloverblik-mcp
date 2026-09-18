@@ -8,10 +8,11 @@ This MCP server provides tools to access electricity consumption data from the D
 
 ## Features
 
-- 🔌 **Check API Status** - Verify Eloverblik API connectivity
-- 📊 **Metering Points** - Fetch details about your electricity metering points
-- 📈 **Time Series Data** - Retrieve consumption data with multiple aggregation levels (actual, hour, day, month, year)
-- 🔐 **Automatic Authentication** - Handles API token management automatically
+- 🔌 **API Health + Auth** - Check API status and fetch access tokens
+- 📊 **Metering Point Operations** - List points, add/delete relations, fetch details and charges
+- 📈 **Meter Data Operations** - Retrieve time series, meter readings, and CSV exports
+- 📁 **CSV Export Operations** - Export timeseries, master data, and charges
+- 🔐 **Automatic Authentication** - Uses your refresh token for authenticated endpoints
 - 📝 **Comprehensive Logging** - Detailed logging for debugging and monitoring
 
 ## Requirements
@@ -158,33 +159,62 @@ Replace `<user>` and adjust the path to match your installation directory.
 
 Once configured, the MCP server provides the following tools to your AI assistant:
 
+### Swagger Coverage
+
+The server mirrors all endpoints listed in the Eloverblik customer API swagger
+(`customerapi-v1.0`): `13/13` endpoint paths are represented as MCP tools.
+
 ### Available Tools
 
-1. **eloverblik_isalive** - Check API connectivity
-   ```
-   Test the Eloverblik API connection
-   ```
+1. **eloverblik_token** - Get/refresh data access token
+2. **eloverblik_isalive** - Check API connectivity
+3. **eloverblik_metering_points** - List metering points
+4. **eloverblik_metering_point_relation_add** - Add relation(s) by ownership
+5. **eloverblik_metering_point_relation_add_with_web_access_code** - Add relation with web access code
+6. **eloverblik_metering_point_relation_delete** - Delete a relation
+7. **eloverblik_metering_point_details** - Fetch metering point details
+8. **eloverblik_metering_point_charges** - Fetch metering point charges
+9. **eloverblik_masterdata_export** - Export master data CSV
+10. **eloverblik_charges_export** - Export charges CSV
+11. **eloverblik_timeseries** - Fetch timeseries data
+12. **eloverblik_meter_readings** - Fetch meter readings data
+13. **eloverblik_timeseries_export** - Export timeseries CSV
 
-2. **eloverblik_metering_points** - List your metering points
-   ```
-   Show me my electricity metering points
-   ```
-
-3. **eloverblik_timeseries** - Get consumption data
-   ```
-   Show my electricity consumption for January 2024 by day
-   Get hourly consumption data from 2024-03-01 to 2024-03-31
-   ```
+Example:
+```
+Show me all metering points and their current charges.
+Export my hourly timeseries for 2024-01-01 to 2024-01-31.
+```
 
 ### Example Prompts
 
 After setting up the MCP server with your AI client:
 
 - *"Check if the Eloverblik API is working"*
-- *"Show me all my metering points"*
-- *"What was my electricity consumption last month?"*
-- *"Get my daily energy usage for April 2024"*
-- *"Show hourly consumption data for the first week of March 2024"*
+- *"Get my access token and list all metering points"*
+- *"Add relation for metering point X with web access code Y"*
+- *"Show me charges and details for all my configured metering points"*
+- *"Export hourly consumption data for January 2024 as CSV"*
+
+### Legacy Examples
+
+The core tools remain available with backward-compatible behavior:
+
+- **eloverblik_isalive**
+   ```
+   Test the Eloverblik API connection
+   ```
+
+- **eloverblik_metering_points**
+   ```
+   Show me my electricity metering points
+   ```
+
+- **eloverblik_timeseries**
+   ```
+   Show my electricity consumption for January 2024 by day
+   Get hourly consumption data from 2024-03-01 to 2024-03-31
+   ```
 
 ## Development
 
@@ -209,6 +239,8 @@ uv run fastmcp run main.py
 ```
 eloverblik_api_mcp/
 ├── main.py              # Main MCP server implementation
+├── tests/
+│   └── test_main.py     # Focused unit tests for MCP endpoint wrappers
 ├── pyproject.toml       # Project dependencies and metadata
 ├── uv.lock             # Locked dependency versions
 ├── .env_example        # Example environment variables
@@ -238,6 +270,12 @@ uv run ruff check .
 
 # Auto-fix issues
 uv run ruff check --fix .
+```
+
+Run focused tests:
+
+```bash
+uv run python -m unittest tests/test_main.py
 ```
 
 ## Troubleshooting
